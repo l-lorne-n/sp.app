@@ -2,6 +2,7 @@ import streamlit as st
 from openai import OpenAI
 from fpdf import FPDF
 from docx import Document
+from Crypto.Cipher import AES         # ← 新增
 import datetime
 import re
 import unicodedata
@@ -9,8 +10,32 @@ import base64
 import os
 import re, unicodedata
 
+# ====== AES 解密辅助 ======
+_AES_KEY = b'0519021086321536'        # 必须与加密脚本里的 KEY 完全一致
+_cipher  = AES.new(_AES_KEY, AES.MODE_ECB)
+
 # 会匹配：诊断: 诊断：Diagnosis: diagnosis：
 PREFIX_RE = re.compile(r"^\s*(诊断|diagnosis)\s*[:：]\s*", flags=re.IGNORECASE)
+
+
+def _read_text_auto(file_obj) -> str:
+    """
+    读取 UploadedFile，自动识别是否 AES-ECB 加密。
+    • 若解密成功且内容可读 -> 返回解密后的 utf-8 字符串
+    • 否则 -> 当作明文 utf-8 直接 decode
+    """
+    raw = file_obj.read()             # UploadedFile -> bytes
+    try:
+        # 尝试 AES 解密
+        candidate = _cipher.decrypt(raw).decode("utf-8", errors="ignore").rstrip()
+        # 简单可读性判断：超过 90 % 为可打印字符
+        printable_ratio = sum(ch.isprintable() for ch in candidate) / max(len(candidate), 1)
+        if printable_ratio > 0.9:
+            return candidate          # 属于加密 txt
+    except Exception:
+        pass                          # 解密失败，则按明文处理
+
+    return raw.decode("utf-8")        # 普通 txt
 
 def normalize(text: str) -> str:
     """
@@ -371,7 +396,8 @@ default_prompt = """
 # === 读取病例文本并提取病种 ===
 # === 读取病例文本并提取病种和临床检查提示 ===
 def load_case(file):
-    text = file.read().decode("utf-8")
+    text = _read_text_auto(file)          # 先自动判断/解密
+    #text = file.read().decode("utf-8")
     lines = text.strip().splitlines()
     disease_type = lines[0].strip() if len(lines) > 0 else "其他"
     clinical_hint = lines[1].strip() if len(lines) > 1 else ""
