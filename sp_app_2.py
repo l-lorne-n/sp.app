@@ -410,6 +410,9 @@ def load_case(file):
 for key in ["diagnosis_score", "conversation_score", "case_text", "clinical_hint", "diagnosis_answer", "plan_answer"]:
     if key not in st.session_state:
         st.session_state[key] = ""
+        # -------------- 新增：临床检查信息的显示开关 --------------
+    if "show_clinical_hint" not in st.session_state:
+        st.session_state.show_clinical_hint = False
 
 # === 构建“病人角色”的提示词 ===
 def build_system_prompt(case_text, persona="平和"):
@@ -508,10 +511,17 @@ if uploaded_file:
     diagnosis = st.session_state.get("diagnosis", "")
     plan_answer = st.session_state.get("plan_answer", "")
 
-    # 显示临床信息（确保 txt 已加载）
-    if st.session_state.get("clinical_hint"):
-        st.markdown("### 🩻 临床检查信息：")
-        st.info(st.session_state["clinical_hint"])
+        # -------- 手动查看临床检查信息 --------
+    if st.session_state.get("clinical_hint"):          # 已经读取到 txt 中的临床检查行
+        # ① 如果还没点按钮，就先给一个按钮
+        if not st.session_state.show_clinical_hint:
+            if st.button("🩻 查看临床检查信息"):      # 你也可以改成放在 sidebar 里
+                st.session_state.show_clinical_hint = True
+    
+        # ② 一旦点过按钮（或本轮已为 True），就展示信息
+        if st.session_state.show_clinical_hint:
+            st.markdown("### 🩻 临床检查信息：")
+            st.info(st.session_state["clinical_hint"])
     # 后续使用 case_text 替代原来的 load_case() 返回值
     persona = st.session_state.get("persona", "平和")
     system_prompt = build_system_prompt(case_text, persona)
